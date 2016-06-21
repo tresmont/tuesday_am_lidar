@@ -1,0 +1,160 @@
+---
+title: "Tuesday LiDAR Lesson"
+author: "Enrique Monta&ntilde;o"
+date: "June 21, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Classification of Raster from Thresholds
+
+First load the libraries
+
+### NOTE
+
+* require provides an error if the package is not installed
+
+```{r load-libraries}
+#load needed libraries
+library(raster)
+library(rhdf5)
+library(rgdal)
+
+
+```
+
+## Load the Canopy Height Model Raster
+
+Load the Canopy Height Model, simply the residual between the canopy structure and terrain
+
+```{r import-chm-raster}
+#load the canopy height model
+chm <- raster("../NEONdata/D17-California/TEAK/2013/lidar/TEAK_lidarCHM.tif")
+
+```
+
+## Visualize the raster
+
+Values of 0 on a landscape indicate regions without vegetation.  We need to set those pixels to `NA` for the sake of visualization.
+
+```{r plot-chm}
+#first set no data values
+chm[chm == 0] <- NA
+
+# plot the raster
+plot(chm,
+     main = "First Plot of TEAK CHM")
+
+```
+
+
+## Look at a Histogram of the values
+
+Look at the distribution of canopy height values
+
+```{r plot-hist}
+#plot a histogram of chm
+hist(chm,
+     main="Distribution of Canopy Height  \n Lower Teakettle, California",
+     xlab="Tree Height (m)",
+     col="springgreen")
+
+```
+
+## Import Aspect
+
+```{r import-aspect}
+
+# import an aspect raster
+aspect <- raster("../NEONdata/D17-California/TEAK/2013/lidar/TEAK_lidarAspect.tif")
+
+# plot the aspect
+plot(aspect,
+main = "Aspect data for TEAK Site")
+
+```
+
+
+##  Create a Classification Matrix
+
+* North Facing Slopes: 0-45 degrees, 315-360 degrees; class=1
+
+* South Facing Slopes: 135-225 degrees; class=2
+
+```{r class-matrix}
+# create a vector of range and classes
+class_m <- c(0, 45, 1, 
+             45, 135, NA,
+             135, 225, 2,
+             225, 315, NA,
+             315, 360, 1)
+
+# make it a matrix
+rcl_m <- as.matrix(class_m,
+                   ncol = 3,
+                   byrow = TRUE)
+rcl_m
+```
+
+## Reclassify the Aspect
+
+```{r reclass-raster}
+
+# reclassify the aspect
+asp_ns <- reclassify(aspect, rcl_m)
+
+# plot the classified raster
+plot(asp_ns,
+     col=c("white","blue","green"), # hard code colors, unclassified (0)=white,
+		 #N (1) =blue, S(2)=green
+     main="North and South Facing Slopes \nLower Teakettle",
+     legend=F)
+# allow legend to plot outside of bounds
+par(xpd=TRUE)
+# create the legend
+legend((par()$usr[2] + 20), 4103300,  # set x,y legend location
+       legend = c("North", "South"),  # make sure the order matches the colors, next
+       fill = c("blue", "green"),
+       bty="n") # turn off border
+```
+
+## Save the output
+
+```{r save-raster, eval=FALSE}
+
+# save the output as geotiff
+writeRaster(asp_ns,
+            file = "../outputs/TEAK/TEAK_nsAspect2.tif",
+            format="GTiff", #format
+            options="COMPRESS=LZW", #compress the data
+            overwrite = TRUE, #overwrite if exists
+            NAflag = -9999) # standard no data value
+
+```
+
+## Mask the data
+
+We often want to exclude data we aren't interested in for analysis.  A mask is a simple math operation multiplying a 1 (for values we want to keep) by the data raster.
+
+```{r mask-raster}
+# make a mask from NDVI
+# import ndvi raster
+ndvi <- raster("../NEONdata/D17-California/TEAK/2013/spectrometer/veg_index/TEAK_NDVI.tif")
+
+# plot the ndvi
+plot(ndvi,
+     main = "NDVI for TEAK Site")
+
+# Mask the NDVI using N/S slopes
+nFacing_ndvi <- mask(ndvi, 
+                     asp_ns)
+
+plot(nFacing_ndvi, 
+     main = "Masked NDVI")
+```
+
+
+
